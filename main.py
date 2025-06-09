@@ -9,10 +9,11 @@ from matplotlib.figure import Figure
 from PyQt6.QtWidgets import(
     QApplication, QMainWindow, QFileDialog, QVBoxLayout, QWidget,
     QLabel, QHBoxLayout, QScrollArea, QToolBar, QStatusBar,
-    QDockWidget, QListWidget, QMessageBox, QSplitter
+    QDockWidget, QListWidget, QMessageBox, QSplitter, QGraphicsView,
+    QGraphicsScene, QGraphicsPixmapItem
 )
-from PyQt6.QtGui import QAction, QIcon
-from PyQt6.QtCore import Qt, QSize
+from PyQt6.QtGui import QAction, QIcon, QPainter, QImage, QPixmap
+from PyQt6.QtCore import Qt, QSize, QRectF, QEvent
 
 
 class TifViewer(QMainWindow):
@@ -24,33 +25,62 @@ class TifViewer(QMainWindow):
         
         self.vector_layers = {} #Store Layers
         self.active_vector_layers = set()
-        
         self.init_ui()
+        
+    def eventFilter(self, source, event):
+        if(source is self.graphics_view.viewport()and event.type()==QEvent.Type.Wheel):
+            self.wheelEvent(event)
+            return True
+        return super().eventFilter(source, event)
     
     def init_ui(self):
         self.main_widget = QWidget()
         self.setCentralWidget(self.main_widget)
         
         self.main_layout = QHBoxLayout(self.main_widget)
-        self.main_layout.setContentsMargins(5,5,5,5)
+        self.main_layout.setContentsMargins(2,2,2,2)
         
         self.init_layer_dock()
         
         self.right_panel = QWidget()
         self.right_layout = QVBoxLayout(self.right_panel)
-        self.main_layout.addWidget(self.right_panel, stretch=3)
+        self.right_layout.setContentsMargins(0, 0, 0, 0)
+        self.main_layout.addWidget(self.right_panel, stretch=5)
+        
+        self.init_graphics_view()
+        self.init_mpl_canvas()
         
         self.create_toolbar()
-        
-        self.status_bar = QStatusBar()
-        self.setStatusBar(self.status_bar)
-        
-        self.init_image_display()
+        self.statusBar = QStatusBar() 
+        self.setStatusBar(self.statusBar)
         
         self.info_label = QLabel("Open a TIF file")
         self.info_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
         self.info_label.setWordWrap(True)
         self.right_layout.addWidget(self.info_label)
+        
+    def init_graphics_view(self):
+        self.graphics_view = QGraphicsView()
+        self.graphics_view.viewport().installEventFilter(self)
+        self.graphics_view.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+        self.graphics_view.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
+        self.graphics_view.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
+        self.graphics_view.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
+        self.graphics_view.setMouseTracking(True)
+        self.scene = QGraphicsScene(-10000, -10000, 20000, 20000)
+        self.graphics_view.setScene(self.scene) 
+        self.right_layout.addWidget(self.graphics_view, stretch=1)
+        
+        self.image_item = QGraphicsPixmapItem()
+        self.scene.addItem(self.image_item)
+                   
+    def init_mpl_canvas(self):
+        self.mpl_figure = Figure(facecolor='none')
+        self.mpl_canvas = FigureCanvas(self.mpl_figure)
+        self.mpl_canvas.setVisible(False)
+        
+        self.mpl_proxy = self.scene.addWidget(self.mpl_canvas)
+        self.mpl_proxy.setZValue(1)
         
     def init_layer_dock(self):
         dock = QDockWidget("Layer Control", self)
@@ -63,67 +93,19 @@ class TifViewer(QMainWindow):
         self.vector_list.itemSelectionChanged.connect(self.updata_vecotr_visilibity)
         
         add_btn = QAction(QIcon.fromTheme("document-open"), "Add Layer", self)
+        add_btn.triggered.connect(self.add_vector_layer)
+        
+        toolbar = QToolBar()
+        toolbar.setIconSize(QSize(16,16))
+        toolbar.addAction(add_btn)
+        
+        dock_layout.addWidget(QLabel("Vector Layer:"))
+        dock_layout.addWidget(toolbar)
+        dock_layout.addWidget(self.vector_list)
         
         dock.setWidget(dock_widget)
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, dock)
-        
-    def init_image_display(self):
-        self.scroll_area = QScrollArea()
-        self.scroll_area.setWidgetResizable(True)
-        self.right_layout.addWidget(self.scroll_area, stretch=1)
-        
-        self.figure = Figure(figsize=(8,6), dpi=100)
-        self.canvas=FigureCanvas(self.figure)
-        self.scroll_area.setWidget(self.canvas)
-        
-        self.canvas.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        self.canvas.setMouseTracking(True)
-        
-        self.canvas.mpl_connect('scroll_event', self.on_scroll)
-        
-        self.scroll_area.setWidget(self.canvas)
-        
-    def on_scroll(self, event):
-        if event.key == 'control':
-            print('on-scroll')
-            x = event.xdata
-            y = event.ydata
-            
-            if x is None or y is None:
-                ax = self.figure.gca()
-                xlim = ax.get_xlim()
-                ylim = ax.get_ylim()
-                x = (xlim[0]+xlim[1])/2
-                y = (ylim[0]+ylim[1])/2
-            
-            zoom_factor = 0.9 if event.step > 0 else 1.1
-            self.zoom_at_point(x, y, zoom_factor)
-            
-    def zoom_at_point(self, x, y, zoom_factor):
-        if not hasattr(self,'ax'):
-            return
-        
-        ax = self.ax
-        
-        xlim = ax.get_xlim()
-        ylim = ax.get_ylim()
-        
-        new_width=(xlim[1]-ylim[0])*zoom_factor
-        new_height=(ylim[1]-ylim[0])*zoom_factor
-        
-        new_xlim = [
-            x - (x-xlim[0])* zoom_factor,
-            x+(xlim[1]-x) * zoom_factor
-        ]
-        new_ylim = [
-            y-(y-ylim[0])*zoom_factor,
-            y+(ylim[1]-y)*zoom_factor
-        ]
-        ax.set_xlim(new_xlim)
-        ax.set_ylim(new_ylim)
-        
-        self.canvas.draw()
-    
+  
     def create_toolbar(self):
         toolbar = QToolBar("Main Tool Bar")
         toolbar.setIconSize(QSize(24,24))
@@ -148,7 +130,7 @@ class TifViewer(QMainWindow):
         
         toolbar.addSeparator()
         
-        rest_view_action = QAction(QIcon.fromTheme("zoom-orginal"),"Rest", self)
+        rest_view_action = QAction(QIcon.fromTheme("zoom-original"),"Reset", self)
         rest_view_action.triggered.connect(self.rest_view)
         toolbar.addAction(rest_view_action)
     
@@ -161,11 +143,14 @@ class TifViewer(QMainWindow):
             self.vector_layers.clear()
             self.vector_list.clear()
             self.active_vector_layers.clear()
-            self.display_tif(file_pth)
+            self.load_tif_file(file_pth)
 
-    def display_tif(self, pth):
+    def load_tif_file(self, pth):
         try:
-            self.figure.clear()
+            self.scene.clear()
+            self.image_item=QGraphicsPixmapItem()
+            self.scene.addItem(self.image_item)
+            
             with rasterio.open(pth) as src:
                 num_bands = src.count
                 width = src.width
@@ -173,62 +158,102 @@ class TifViewer(QMainWindow):
                 crs = src.crs
                 transform = src.transform
                 bounds = src.bounds
-                
-                info=(
-                     f"<b>文件:</b> {os.path.basename(pth)}<br>"
-                    f"<b>波段数:</b> {num_bands}<br>"
-                    f"<b>尺寸:</b> {width} × {height}<br>"
-                    f"<b>坐标系统:</b> {crs if crs else '无'}<br>"
-                    f"<b>范围:</b> {bounds}"
+                info = (
+                    f"<b>File:</b> {os.path.basename(pth)}<br>"
+                    f"<b>Bands:</b> {num_bands}<br>"
+                    f"<b>Size:</b> {width} × {height}<br>"
+                    f"<b>Cor System:</b> {crs if crs else '无'}<br>"
+                    f"<b>Bounds:</b> {bounds}"
                 )
+                
                 self.info_label.setText(info)
                 
-                self.ax = self.figure.add_subplot(111)
-                if num_bands >=3:
+                if num_bands >= 3:
                     red = src.read(1)
                     green = src.read(2)
                     blue = src.read(3)
                     img = np.dstack((red, green, blue))
-                    show(img, ax =self.ax, transform=transform)
+                    img = (img*255.0 / img.max()).astype(np.uint8)
+
+                    height, width,_ = img.shape
+                    bytes_per_line = 3*width
+                    qimage = QImage(img.data, width, height, bytes_per_line, QImage.Format.Format_RGBA8888)
+                    
                 else:
                     img = src.read(1)
-                    show(img, ax=self.ax, transform=transform, cmap="gray")
+                    img = (img*255.0 / img.max()).astype(np.uint8)
+                    height, width = img.shape
+                    qimage=QImage(img.data, width, height, width, QImage.Format.Format_Grayscale8)
                     
+                pixmap = QPixmap.fromImage(qimage)
+                self.image_item.setPixmap(pixmap)
+                
                 self.current_transform = transform
-                self.current_bound = bounds
+                self.current_bounds = bounds
                 
-                self.draw_vector_layers()
+                self.init_mpl_canvas()
+                self.statusBar.showMessage(f"Loaded: {pth}", 3000)
                 
-                self.canvas.draw()
-                
-                self.status_bar.showMessage(f"Loaded: {pth}", 3000)
+                self.graphics_view.fitInView(self.image_item, Qt.AspectRatioMode.KeepAspectRatio)
+        
         except Exception as e:
+            print(str(e))
             self.info_label.setText(f"<b>Error:</b> {str(e)}")
-            self.status_bar.showMessage(f"Error: {str(e)}", 5000)
-
+            self.statusBar.showMessage(f"Error: {str(e)}", 5000)
+        
+    def add_vector_layer(self):
+        pass
     def draw_vector_layers(self):
         pass
     
     def updata_vecotr_visilibity(self):
         pass
+    
+    #Resize Events
+    def update_mpl_canvas_size(self):
+        if not hasattr(self, 'mpl_proxy'):
+            return
+        view_rect = self.graphics_view.mapToScene(self.graphics_view.viewport().rect()).boundingRect()
+        self.mpl_proxy.setPos(view_rect.center())
+        self.mpl_proxy.setGeometry(QRectF(0,0,view_rect.width(), view_rect.height()))
+        
+    def resizeEvent(self,event):
+        super().resizeEvent(event)
+        self.update_mpl_canvas_size()
+        
+    
     def zoom_out(self):
-        if hasattr(self, 'ax'):
-            xlim = self.ax.get_xlim()
-            ylim = self.ax.get_ylim()
-            self.ax.set_xlim([x*1.1 for x in xlim])
-            self.ax.set_ylim([y*1.1 for y in ylim])
-            self.canvas.draw()
+        center = self.graphics_view.mapToScene(self.graphics_view.viewport().rect().center())
+        self.graphics_view.scale(1/1.2, 1/1.2)
+        self.graphics_view.centerOn(center)
+        self.update_mpl_canvas_size()
     
     def zoom_in(self):
-        if hasattr(self, 'ax'):
-            xlim = self.ax.get_xlim()
-            ylim = self.ax.get_ylim()
-            self.ax.set_xlim([x*0.9 for x in xlim])
-            self.ax.set_ylim([y*0.9 for y in ylim]) 
-            self.canvas.draw()
+        center = self.graphics_view.mapToScene(self.graphics_view.viewport().rect().center())
+        self.graphics_view.scale(1.2, 1.2)
+        self.graphics_view.centerOn(center)
+        self.update_mpl_canvas_size()
     
     def rest_view(self):
-        pass
+        if hasattr(self, 'image_item'):
+            self.graphics_view.fitInView(self.image_item, Qt.AspectRatioMode.KeepAspectRatio)
+            self.update_mpl_canvas_size()
+    
+    def wheelEvent(self,event):
+        if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            zoom_factor = 1.15 if event.angleDelta().y() > 0 else 1/1.15
+            old_pos = self.graphics_view.mapToScene(event.position().toPoint())
+            
+            self.graphics_view.scale(zoom_factor, zoom_factor)
+            new_pos = self.graphics_view.mapToScene(event.position().toPoint())
+            
+            delta = new_pos-old_pos
+            self.graphics_view.translate(delta.x(), delta.y())
+            self.update_mpl_canvas_size()
+            
+            event.accept()
+        else:
+            super().wheelEvent(event)
     
 if __name__ == "__main__":
     app = QApplication(sys.argv)
