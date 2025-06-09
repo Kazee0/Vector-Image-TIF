@@ -74,9 +74,56 @@ class TifViewer(QMainWindow):
         
         self.figure = Figure(figsize=(8,6), dpi=100)
         self.canvas=FigureCanvas(self.figure)
+        self.scroll_area.setWidget(self.canvas)
+        
+        self.canvas.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.canvas.setMouseTracking(True)
+        
+        self.canvas.mpl_connect('scroll_event', self.on_scroll)
         
         self.scroll_area.setWidget(self.canvas)
         
+    def on_scroll(self, event):
+        if event.key == 'control':
+            print('on-scroll')
+            x = event.xdata
+            y = event.ydata
+            
+            if x is None or y is None:
+                ax = self.figure.gca()
+                xlim = ax.get_xlim()
+                ylim = ax.get_ylim()
+                x = (xlim[0]+xlim[1])/2
+                y = (ylim[0]+ylim[1])/2
+            
+            zoom_factor = 0.9 if event.step > 0 else 1.1
+            self.zoom_at_point(x, y, zoom_factor)
+            
+    def zoom_at_point(self, x, y, zoom_factor):
+        if not hasattr(self,'ax'):
+            return
+        
+        ax = self.ax
+        
+        xlim = ax.get_xlim()
+        ylim = ax.get_ylim()
+        
+        new_width=(xlim[1]-ylim[0])*zoom_factor
+        new_height=(ylim[1]-ylim[0])*zoom_factor
+        
+        new_xlim = [
+            x - (x-xlim[0])* zoom_factor,
+            x+(xlim[1]-x) * zoom_factor
+        ]
+        new_ylim = [
+            y-(y-ylim[0])*zoom_factor,
+            y+(ylim[1]-y)*zoom_factor
+        ]
+        ax.set_xlim(new_xlim)
+        ax.set_ylim(new_ylim)
+        
+        self.canvas.draw()
+    
     def create_toolbar(self):
         toolbar = QToolBar("Main Tool Bar")
         toolbar.setIconSize(QSize(24,24))
@@ -165,13 +212,24 @@ class TifViewer(QMainWindow):
     def updata_vecotr_visilibity(self):
         pass
     def zoom_out(self):
-        pass
+        if hasattr(self, 'ax'):
+            xlim = self.ax.get_xlim()
+            ylim = self.ax.get_ylim()
+            self.ax.set_xlim([x*1.1 for x in xlim])
+            self.ax.set_ylim([y*1.1 for y in ylim])
+            self.canvas.draw()
     
     def zoom_in(self):
-        pass
+        if hasattr(self, 'ax'):
+            xlim = self.ax.get_xlim()
+            ylim = self.ax.get_ylim()
+            self.ax.set_xlim([x*0.9 for x in xlim])
+            self.ax.set_ylim([y*0.9 for y in ylim]) 
+            self.canvas.draw()
     
     def rest_view(self):
         pass
+    
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     viewer = TifViewer()
