@@ -60,7 +60,7 @@ class TifViewerBackend(QObject):
         except Exception as e:
             self.errorOccurred.emit(f"Load file error: {str(e)}")
     
-    @pyqtSlot
+    @pyqtSlot()
     def openFileDialog(self):
         pass
     
