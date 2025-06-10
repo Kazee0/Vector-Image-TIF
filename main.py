@@ -12,9 +12,9 @@ from PyQt6.QtWidgets import(
     QDockWidget, QListWidget, QMessageBox, QSplitter, QGraphicsView,
     QGraphicsScene, QGraphicsPixmapItem
 )
-from PyQt6.QtGui import QAction, QIcon, QPainter, QImage, QPixmap
+from PyQt6.QtGui import QAction, QIcon, QPainter, QImage, QPixmap, QFont
 from PyQt6.QtCore import Qt, QSize, QRectF, QEvent
-
+from utils.log_transfer import LogTransfer
 
 class TifViewer(QMainWindow):
     def __init__(self):
@@ -25,8 +25,10 @@ class TifViewer(QMainWindow):
         
         self.vector_layers = {} #Store Layers
         self.active_vector_layers = set()
+        self.log_transfer = LogTransfer()
         self.init_ui()
         
+          
     def eventFilter(self, source, event):
         if(source is self.graphics_view.viewport()and event.type()==QEvent.Type.Wheel):
             self.wheelEvent(event)
@@ -90,8 +92,8 @@ class TifViewer(QMainWindow):
         
         self.vector_list=QListWidget()
         self.vector_list.setSelectionMode(QListWidget.SelectionMode.MultiSelection)
-        self.vector_list.itemSelectionChanged.connect(self.updata_vecotr_visilibity)
-        
+        self.vector_list.itemSelectionChanged.connect(self.handle_layer_selection)
+        self.vector_list.setFont(QFont('Arial', 30))
         add_btn = QAction(QIcon.fromTheme("document-open"), "Add Layer", self)
         add_btn.triggered.connect(self.add_vector_layer)
         
@@ -132,12 +134,17 @@ class TifViewer(QMainWindow):
         zoom_out_action.triggered.connect(self.zoom_out)
         toolbar.addAction(zoom_out_action)
         
-        toolbar.addSeparator()
         
         rest_view_action = QAction(QIcon.fromTheme("zoom-original"),"Reset", self)
         rest_view_action.triggered.connect(self.rest_view)
         toolbar.addAction(rest_view_action)
-    
+        
+        toolbar.addSeparator()
+        
+        log_function = QAction( "Apply Log Transform", self)
+        log_function.triggered.connect(self.open_file)
+        toolbar.addAction(log_function)
+            
     def open_file(self):
         file_pth, _ = QFileDialog.getOpenFileName(
             self, "","","TIF Files (*.tif *.tiff);;All (*)"
@@ -196,7 +203,6 @@ class TifViewer(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Error", f"保存文件时出错:\n{str(e)}")
                    
-    
     def load_tif_file(self, pth):
         try:
             self.scene.clear()
@@ -243,6 +249,14 @@ class TifViewer(QMainWindow):
                 self.current_transform = transform
                 self.current_bounds = bounds
                 
+                if self.log_transfer.log_item is None:
+                    if num_bands>= 3:
+                        img_arr = np.dstack((src.read(1), src.read(2), src.read(3)))
+                    else:
+                        img_arr = src.read(1)
+                        
+                    self.log_transfer.log_item = self.log_transfer.create_log_layer(self.scene, img_arr, src.width, src.height)
+                    self.vector_list.addItem('Log Layer')
                 self.init_mpl_canvas()
                 self.statusBar.showMessage(f"Loaded: {pth}", 3000)
                 
@@ -252,16 +266,18 @@ class TifViewer(QMainWindow):
             print(str(e))
             self.info_label.setText(f"<b>Error:</b> {str(e)}")
             self.statusBar.showMessage(f"Error: {str(e)}", 5000)
-        
+    
+    def handle_layer_selection(self):
+        selected = self.vector_list.selectedItems()
+        log_layer_selected = "Log Layer" in [item.text() for item in selected]
+        if self.log_transfer.log_item:
+            self.log_transfer.log_item.setVisible(log_layer_selected)
+    
     def add_vector_layer(self):
         pass
     def draw_vector_layers(self):
         pass
-    
-    def updata_vecotr_visilibity(self):
-        pass
-    
-    #Resize Events
+
     def update_mpl_canvas_size(self):
         if not hasattr(self, 'mpl_proxy'):
             return
@@ -273,7 +289,6 @@ class TifViewer(QMainWindow):
         super().resizeEvent(event)
         self.update_mpl_canvas_size()
         
-    
     def zoom_out(self):
         center = self.graphics_view.mapToScene(self.graphics_view.viewport().rect().center())
         self.graphics_view.scale(1/1.2, 1/1.2)
