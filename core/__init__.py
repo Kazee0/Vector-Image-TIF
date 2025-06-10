@@ -1,2 +1,0 @@
-from event_handler import EventHandler
-from ui_initializer import UIInitializer
