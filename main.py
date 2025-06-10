@@ -28,7 +28,6 @@ class TifViewer(QMainWindow):
         self.log_transfer = LogTransfer()
         self.init_ui()
         
-          
     def eventFilter(self, source, event):
         if(source is self.graphics_view.viewport()and event.type()==QEvent.Type.Wheel):
             self.wheelEvent(event)
@@ -101,7 +100,7 @@ class TifViewer(QMainWindow):
         toolbar.setIconSize(QSize(16,16))
         toolbar.addAction(add_btn)
         
-        dock_layout.addWidget(QLabel("Vector Layer:"))
+        dock_layout.addWidget(QLabel("Layers:"))
         dock_layout.addWidget(toolbar)
         dock_layout.addWidget(self.vector_list)
         
@@ -140,10 +139,6 @@ class TifViewer(QMainWindow):
         toolbar.addAction(rest_view_action)
         
         toolbar.addSeparator()
-        
-        log_function = QAction( "Apply Log Transform", self)
-        log_function.triggered.connect(self.open_file)
-        toolbar.addAction(log_function)
             
     def open_file(self):
         file_pth, _ = QFileDialog.getOpenFileName(
@@ -202,7 +197,7 @@ class TifViewer(QMainWindow):
             self.cwd = os.path.dirname(filepath)
         except Exception as e:
             QMessageBox.critical(self, "Error", f"保存文件时出错:\n{str(e)}")
-                   
+
     def load_tif_file(self, pth):
         try:
             self.scene.clear()
@@ -248,8 +243,9 @@ class TifViewer(QMainWindow):
                 
                 self.current_transform = transform
                 self.current_bounds = bounds
+                reply = QMessageBox.question(self, 'Log', 'Create log layer?', QMessageBox.StandardButton.Yes|QMessageBox.StandardButton.No)
                 
-                if self.log_transfer.log_item is None:
+                if self.log_transfer.log_item is None and reply:
                     if num_bands>= 3:
                         img_arr = np.dstack((src.read(1), src.read(2), src.read(3)))
                     else:
@@ -275,6 +271,7 @@ class TifViewer(QMainWindow):
     
     def add_vector_layer(self):
         pass
+    
     def draw_vector_layers(self):
         pass
 
