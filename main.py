@@ -3,7 +3,6 @@ import os
 import numpy as np
 import rasterio, cv2
 from rasterio.plot import show
-import geopandas as gpd
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 from PyQt6.QtWidgets import(
