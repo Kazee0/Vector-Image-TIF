@@ -7,13 +7,16 @@ from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 from PyQt6.QtWidgets import(
     QApplication, QMainWindow, QFileDialog, QVBoxLayout, QWidget,
-    QLabel, QHBoxLayout, QScrollArea, QToolBar, QStatusBar,
-    QDockWidget, QListWidget, QMessageBox, QSplitter, QGraphicsView,
+    QLabel, QHBoxLayout, QToolBar, QStatusBar,
+    QDockWidget, QListWidget, QMessageBox, QGraphicsView,
     QGraphicsScene, QGraphicsPixmapItem
 )
 from PyQt6.QtGui import QAction, QIcon, QPainter, QImage, QPixmap, QFont
 from PyQt6.QtCore import Qt, QSize, QRectF, QEvent
 from utils.log_transfer import LogTransfer
+from core.tagging_system import TagHandler
+from utils.image_adjustment import ImageAdjustment
+
 
 class TifViewer(QMainWindow):
     def __init__(self):
@@ -25,6 +28,10 @@ class TifViewer(QMainWindow):
         self.vector_layers = {} #Store Layers
         self.active_vector_layers = set()
         self.log_transfer = LogTransfer()
+        self.adjust_dock = None
+        self.adjustment = ImageAdjustment(self)
+        
+        
         self.init_ui()
         
     def eventFilter(self, source, event):
@@ -49,7 +56,7 @@ class TifViewer(QMainWindow):
         
         self.init_graphics_view()
         self.init_mpl_canvas()
-        
+        self.tag_handler = TagHandler(self)
         self.create_toolbar()
         self.statusBar = QStatusBar() 
         self.setStatusBar(self.statusBar)
@@ -58,7 +65,7 @@ class TifViewer(QMainWindow):
         self.info_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
         self.info_label.setWordWrap(True)
         self.right_layout.addWidget(self.info_label)
-        
+            
     def init_graphics_view(self):
         self.graphics_view = QGraphicsView()
         self.graphics_view.viewport().installEventFilter(self)
@@ -73,7 +80,7 @@ class TifViewer(QMainWindow):
         
         self.image_item = QGraphicsPixmapItem()
         self.scene.addItem(self.image_item)
-
+          
     def init_mpl_canvas(self):
         self.mpl_figure = Figure(facecolor='none')
         self.mpl_canvas = FigureCanvas(self.mpl_figure)
@@ -138,6 +145,27 @@ class TifViewer(QMainWindow):
         toolbar.addAction(rest_view_action)
         
         toolbar.addSeparator()
+        adjust_action = QAction(QIcon.fromTheme("color-management"), "Adjust Image", self)
+        adjust_action.setShortcut("Ctrl+E")
+        adjust_action.triggered.connect(self.toggle_adjustment)
+        
+        toolbar.addAction(adjust_action)
+        tag_action = QAction(QIcon.fromTheme("edit-select-rectangle"), "Tag Mode", self)
+        tag_action.setShortcut("Ctrl+T")
+        tag_action.triggered.connect(self.tag_handler.start_drawing)
+        
+        toolbar.addAction(tag_action)
+        
+    def toggle_adjustment(self):
+
+        if self.adjust_dock is None:
+            self.adjust_dock = QDockWidget("Image Adjustments", self)
+            self.adjust_dock.setAllowedAreas(Qt.DockWidgetArea.RightDockWidgetArea|Qt.DockWidgetArea.LeftDockWidgetArea)
+            self.adjust_dock.setWidget(self.adjustment.create_adjustment_panel())
+            self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.adjust_dock)
+            self.adjust_dock.setVisible(True)
+        else:
+            self.adjust_dock.setVisible(not self.adjust_dock.isVisible())
             
     def open_file(self):
         file_pth, _ = QFileDialog.getOpenFileName(
@@ -236,7 +264,8 @@ class TifViewer(QMainWindow):
                     img = (img*255.0 / img.max()).astype(np.uint8)
                     height, width = img.shape
                     qimage=QImage(img.data, width, height, width, QImage.Format.Format_Grayscale8)
-                    
+                self.adjustment.set_original_image(img)
+                
                 pixmap = QPixmap.fromImage(qimage)
                 self.image_item.setPixmap(pixmap)
                 
@@ -277,10 +306,14 @@ class TifViewer(QMainWindow):
     def update_mpl_canvas_size(self):
         if not hasattr(self, 'mpl_proxy'):
             return
+            
         view_rect = self.graphics_view.mapToScene(self.graphics_view.viewport().rect()).boundingRect()
         self.mpl_proxy.setPos(view_rect.center())
-        self.mpl_proxy.setGeometry(QRectF(0,0,view_rect.width(), view_rect.height()))
+        self.mpl_proxy.setGeometry(QRectF(0, 0, view_rect.width(), view_rect.height()))
         
+        if hasattr(self, 'tag_handler'):
+            self.tag_handler.update_canvas_size()
+                
     def resizeEvent(self,event):
         super().resizeEvent(event)
         self.update_mpl_canvas_size()
