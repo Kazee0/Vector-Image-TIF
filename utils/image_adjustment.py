@@ -8,6 +8,7 @@ class ImageAdjustment:
     def __init__(self, parent):
         self.parent = parent
         self.original_image = None
+        self.log_img = None
         self.current_layers = []
         
     def create_adjustment_panel(self):
@@ -75,6 +76,7 @@ class ImageAdjustment:
         self.max_label.setText("Maximum: 1.0")
         
         self.update_display(self.original_image)
+        self.parent.log_transfer.log_item.setPixmap(QPixmap.fromImage(self.log_img))
         
     def update_brightness_value(self):
         self.brightness_label.setText(f"Brightness: {self.brightness_slider.value()}")
@@ -90,7 +92,10 @@ class ImageAdjustment:
 
     def set_original_image(self, image):
         self.original_image = image.copy()
-    
+        
+    def set_log_image(self, image):
+        self.log_img = image.copy()
+
     def handle_selected_layer(self):
         selected_items = self.parent.vector_list.selectedItems()
         self.current_layers = [item.text() for item in selected_items]
@@ -109,7 +114,6 @@ class ImageAdjustment:
         if not self.current_layers: 
             if self.original_image is None:
                 return
-                
             img = self.apply_adjustments(
                 self.original_image.copy(),
                 brightness,
@@ -123,8 +127,7 @@ class ImageAdjustment:
                 if layer_name == "Log Layer" and hasattr(self.parent.log_transfer, 'log_item'):
                     log_item = self.parent.log_transfer.log_item
                     if log_item:
-                        qimg = log_item.pixmap().toImage()
-                        img = self.qimage_to_numpy(qimg)
+                        img = self.qimage_to_numpy(self.log_img)
                         adjusted_img = self.apply_adjustments(img, brightness, contrast, min_val, max_val)
                         log_item.setPixmap(QPixmap.fromImage(self.numpy_to_qimage(adjusted_img)))
 
@@ -160,9 +163,27 @@ class ImageAdjustment:
         width = qimage.width()
         height = qimage.height()
         bytes_per_line = qimage.bytesPerLine()
-        
-        ptr = qimage.constBits()
+
+        if qimage.format() == QImage.Format.Format_RGB32:
+            qimage = qimage.convertToFormat(QImage.Format.Format_RGBA8888)
+        elif qimage.format() == QImage.Format.Format_ARGB32:
+            qimage = qimage.convertToFormat(QImage.Format.Format_RGBA8888)
+        elif qimage.format() == QImage.Format.Format_RGB888:
+            qimage = qimage.convertToFormat(QImage.Format.Format_RGBA8888)
+
+        ptr = qimage.bits()
         ptr.setsize(qimage.sizeInBytes())
-        arr = np.frombuffer(ptr, dtype=np.uint8).reshape((height, bytes_per_line // 4, 4))
-        arr = arr[:, :width, :3]
-        return arr[..., [2, 1, 0]]
+
+        if qimage.format() == QImage.Format.Format_RGBA8888:
+            arr = np.frombuffer(ptr, dtype=np.uint8).reshape((height, bytes_per_line // 4, 4))
+            arr = arr[:, :width, :4] 
+            return arr[..., [2, 1, 0, 3]]
+        elif qimage.format() == QImage.Format.Format_RGB888:
+            arr = np.frombuffer(ptr, dtype=np.uint8).reshape((height, bytes_per_line // 3, 3))
+            arr = arr[:, :width, :3]
+            return arr[..., [2, 1, 0]]
+        elif qimage.format() == QImage.Format.Format_Grayscale8:
+            arr = np.frombuffer(ptr, dtype=np.uint8).reshape((height, bytes_per_line))
+            return arr[:, :width]
+        else:
+            raise ValueError(f"Unsupported image format: {qimage.format()}")

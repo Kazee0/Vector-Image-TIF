@@ -34,7 +34,7 @@ class LogTransfer:
         pixmap = QPixmap.fromImage(qimge)
         log_item = scene.addPixmap(pixmap)
         log_item.setVisible(False)
-        return log_item
+        return log_item, qimge
     
     def toggle_visibility(self, log_item):
         log_item.setVisible(not log_item.isVisible())

@@ -221,10 +221,10 @@ class TifViewer(QMainWindow):
             if not cv2.imwrite(filepath, cv_image):
                 raise ValueError("Saving Filed")
                 
-            QMessageBox.information(self, "Success", f"图像已保存为:\n{filepath}")
+            QMessageBox.information(self, "Success", f"Image Saved:\n{filepath}")
             self.cwd = os.path.dirname(filepath)
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"保存文件时出错:\n{str(e)}")
+            QMessageBox.critical(self, "Error", f"Image Error:\n{str(e)}")
 
     def load_tif_file(self, pth):
         try:
@@ -278,8 +278,8 @@ class TifViewer(QMainWindow):
                         img_arr = np.dstack((src.read(1), src.read(2), src.read(3)))
                     else:
                         img_arr = src.read(1)
-
-                    self.log_transfer.log_item = self.log_transfer.create_log_layer(self.scene, img_arr, src.width, src.height)
+                    self.log_transfer.log_item, log_i = self.log_transfer.create_log_layer(self.scene, img_arr, src.width, src.height)
+                    self.adjustment.set_log_image(log_i)
                     self.vector_list.addItem('Log Layer')
                 self.init_mpl_canvas()
                 self.statusBar.showMessage(f"Loaded: {pth}", 3000)
