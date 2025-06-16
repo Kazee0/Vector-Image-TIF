@@ -23,7 +23,7 @@ class TifViewer(QMainWindow):
         super().__init__()
         self.setWindowTitle("TIF Viewer")
         
-        self.current_path = None #Log Current Working Path
+        self.current_path = None
         
         self.vector_layers = {} #Store Layers
         self.active_vector_layers = set()
@@ -98,7 +98,8 @@ class TifViewer(QMainWindow):
         self.vector_list=QListWidget()
         self.vector_list.setSelectionMode(QListWidget.SelectionMode.MultiSelection)
         self.vector_list.itemSelectionChanged.connect(self.handle_layer_selection)
-        self.vector_list.setFont(QFont('Arial', 30))
+        self.vector_list.itemSelectionChanged.connect(self.adjustment.handle_selected_layer)
+        self.vector_list.setFont(QFont('Arial', 25))
         add_btn = QAction(QIcon.fromTheme("document-open"), "Add Layer", self)
         add_btn.triggered.connect(self.add_vector_layer)
         
@@ -272,13 +273,12 @@ class TifViewer(QMainWindow):
                 self.current_transform = transform
                 self.current_bounds = bounds
                 reply = QMessageBox.question(self, 'Log', 'Create log layer?', QMessageBox.StandardButton.Yes|QMessageBox.StandardButton.No)
-                
-                if self.log_transfer.log_item is None and reply:
+                if self.log_transfer.log_item is None and reply == QMessageBox.StandardButton.Yes:
                     if num_bands>= 3:
                         img_arr = np.dstack((src.read(1), src.read(2), src.read(3)))
                     else:
                         img_arr = src.read(1)
-                        
+
                     self.log_transfer.log_item = self.log_transfer.create_log_layer(self.scene, img_arr, src.width, src.height)
                     self.vector_list.addItem('Log Layer')
                 self.init_mpl_canvas()
