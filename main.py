@@ -156,6 +156,12 @@ class TifViewer(QMainWindow):
         tag_action.triggered.connect(self.tag_handler.start_drawing)
         
         toolbar.addAction(tag_action)
+        toolbar.addSeparator()
+        
+        exit_action = QAction(QIcon.fromTheme("application-exit"), "Exit", self)
+        exit_action.setShortcut("Ctrl+Q")
+        exit_action.triggered.connect(self.close)
+        toolbar.addAction(exit_action)
         
     def toggle_adjustment(self):
 
