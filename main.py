@@ -160,7 +160,7 @@ class TifViewer(QMainWindow):
         
         exit_action = QAction(QIcon.fromTheme("application-exit"), "Exit", self)
         exit_action.setShortcut("Ctrl+Q")
-        exit_action.triggered.connect(self.close)
+        exit_action.triggered.connect(QApplication.quit)
         toolbar.addAction(exit_action)
         
     def toggle_adjustment(self):
