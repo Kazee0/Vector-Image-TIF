@@ -156,7 +156,7 @@ class TagHandler:
                 self.clear_tags()
                 
                 for tag_id, tag_data in data.items():
-                    x,y,w,h = tag_data['cords']
+                    x,y,w,h = tag_data['coords']
                     id = tag_data['label']
                     
                     rect_item = QGraphicsRectItem(0, 0, w, h)
@@ -167,7 +167,7 @@ class TagHandler:
                     
                     self.tags[int(tag_id)] = {
                         'rect':rect_item,
-                        'cords':(x,y,w,h),
+                        'coords':(x,y,w,h),
                         'label':id
                     }
                     self.tag_list.addItem(label)
@@ -196,11 +196,11 @@ class TagHandler:
                     
                 data = {}
                 for tag_id, tag_info in self.tags.items():
-                    data[tag_info] ={
-                        'cords': tag_info['cords'],
+                    data[str(tag_info)] ={
+                        'coords': tag_info['coords'],
                         'label':tag_info['label']
                     }
-                
+
                 with open(file_pth, "w") as f:
                     import json
                     json.dump(data, f, indent=2)
@@ -279,7 +279,6 @@ class TagHandler:
         for tag_id, tag_info in self.tags.items():
             if tag_info['label'] == tag_text:
                 tag_info['rect'].setPen(QPen(QColor(0, 255, 0), 2))
-                
                 self.main_window.graphics_view.centerOn(tag_info['rect'])
                 
             else:
