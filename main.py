@@ -25,12 +25,11 @@ class TifViewer(QMainWindow):
         
         self.current_path = None
         
-        self.vector_layers = {} #Store Layers
+        self.vector_layers = {}
         self.active_vector_layers = set()
         self.log_transfer = LogTransfer()
         self.adjust_dock = None
         self.adjustment = ImageAdjustment(self)
-        
         
         self.init_ui()
         
@@ -55,7 +54,6 @@ class TifViewer(QMainWindow):
         self.main_layout.addWidget(self.right_panel, stretch=5)
         
         self.init_graphics_view()
-        self.init_mpl_canvas()
         self.tag_handler = TagHandler(self)
         self.create_toolbar()
         self.statusBar = QStatusBar() 
@@ -80,14 +78,6 @@ class TifViewer(QMainWindow):
         
         self.image_item = QGraphicsPixmapItem()
         self.scene.addItem(self.image_item)
-          
-    def init_mpl_canvas(self):
-        self.mpl_figure = Figure(facecolor='none')
-        self.mpl_canvas = FigureCanvas(self.mpl_figure)
-        self.mpl_canvas.setVisible(False)
-        
-        self.mpl_proxy = self.scene.addWidget(self.mpl_canvas)
-        self.mpl_proxy.setZValue(1)
         
     def init_layer_dock(self):
         dock = QDockWidget("Layer Control", self)
@@ -153,7 +143,9 @@ class TifViewer(QMainWindow):
         toolbar.addAction(adjust_action)
         tag_action = QAction(QIcon.fromTheme("edit-select-rectangle"), "Tag Mode", self)
         tag_action.setShortcut("Ctrl+T")
-        tag_action.triggered.connect(self.tag_handler.start_drawing)
+        tag_action.setCheckable(True)
+        tag_action.triggered.connect(self.tag_handler.set_drawing_mode)
+        self.tag_handler.set_tag_action(tag_action)
         
         toolbar.addAction(tag_action)
         toolbar.addSeparator()
@@ -287,7 +279,6 @@ class TifViewer(QMainWindow):
                     self.log_transfer.log_item, log_i = self.log_transfer.create_log_layer(self.scene, img_arr, src.width, src.height)
                     self.adjustment.set_log_image(log_i)
                     self.vector_list.addItem('Log Layer')
-                self.init_mpl_canvas()
                 self.statusBar.showMessage(f"Loaded: {pth}", 3000)
                 
                 self.graphics_view.fitInView(self.image_item, Qt.AspectRatioMode.KeepAspectRatio)
@@ -308,38 +299,20 @@ class TifViewer(QMainWindow):
     
     def draw_vector_layers(self):
         pass
-
-    def update_mpl_canvas_size(self):
-        if not hasattr(self, 'mpl_proxy'):
-            return
-            
-        view_rect = self.graphics_view.mapToScene(self.graphics_view.viewport().rect()).boundingRect()
-        self.mpl_proxy.setPos(view_rect.center())
-        self.mpl_proxy.setGeometry(QRectF(0, 0, view_rect.width(), view_rect.height()))
-        
-        if hasattr(self, 'tag_handler'):
-            self.tag_handler.update_canvas_size()
-                
-    def resizeEvent(self,event):
-        super().resizeEvent(event)
-        self.update_mpl_canvas_size()
         
     def zoom_out(self):
         center = self.graphics_view.mapToScene(self.graphics_view.viewport().rect().center())
         self.graphics_view.scale(1/1.2, 1/1.2)
         self.graphics_view.centerOn(center)
-        self.update_mpl_canvas_size()
-    
+
     def zoom_in(self):
         center = self.graphics_view.mapToScene(self.graphics_view.viewport().rect().center())
         self.graphics_view.scale(1.2, 1.2)
         self.graphics_view.centerOn(center)
-        self.update_mpl_canvas_size()
-    
+
     def rest_view(self):
         if hasattr(self, 'image_item'):
             self.graphics_view.fitInView(self.image_item, Qt.AspectRatioMode.KeepAspectRatio)
-            self.update_mpl_canvas_size()
     
     def wheelEvent(self,event):
         if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
@@ -351,7 +324,6 @@ class TifViewer(QMainWindow):
             
             delta = new_pos-old_pos
             self.graphics_view.translate(delta.x(), delta.y())
-            self.update_mpl_canvas_size()
             
             event.accept()
         else:
