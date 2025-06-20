@@ -1,7 +1,89 @@
 from PyQt6.QtWidgets import QListWidget, QDockWidget, QWidget, QVBoxLayout, QToolBar, QLabel, QGraphicsView, QGraphicsRectItem, QFileDialog, QMessageBox
-from PyQt6.QtGui import QIcon, QFont, QAction,QPen,QColor, QBrush
-from PyQt6.QtCore import Qt, QSize
-import matplotlib.patches as patches
+from PyQt6.QtGui import QIcon, QFont, QAction,QPen,QColor
+from PyQt6.QtCore import Qt, QSizeF, QRectF, QPoint, QPointF,QSize
+
+
+class ResizeRect(QGraphicsRectItem):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.setAcceptHoverEvents(True)
+        self.setFlag(QGraphicsRectItem.GraphicsItemFlag.ItemIsMovable, True)
+        self.setFlag(QGraphicsRectItem.GraphicsItemFlag.ItemIsSelectable, True)
+        self.setFlag(QGraphicsRectItem.GraphicsItemFlag.ItemSendsGeometryChanges, True)
+        self.setPen(QPen(QColor(255,0,0), 2))
+        
+        self.resize_handles = {
+            'top_left': None,
+            'top_right': None,
+            'bottom_left': None,
+            'bottom_right': None,
+        }
+        self.active_resize_handle = None
+        self.orginal_rect = QRectF()
+        self.orginal_pos = QPoint()
+        self.update_resize_handles()
+        
+        self.cursors = {
+            'top_left': Qt.CursorShape.SizeFDiagCursor,
+        }
+    
+    def update_resize_handles(self):
+        rect = self.rect()
+        self.resize_handles['top_left'] = QRectF(rect.topLeft(), QSizeF(10, 10))
+        self.resize_handles['top_right'] = QRectF(rect.topRight() - QPointF(10, 0), QSizeF(10, 10))
+        self.resize_handles['bottom_left'] = QRectF(rect.bottomLeft() - QPointF(0, 10), QSizeF(10, 10))
+        self.resize_handles['bottom_right'] = QRectF(rect.bottomRight() - QPointF(10, 10), QSizeF(10, 10))
+    
+    def paint(self, painter, option, widget):
+        super().paint(painter,option,widget)
+        
+        if self.isSelected():
+            painter.setPen(QPen(QColor(0,0,0), 1))
+            for handle in self.resize_handles.values():
+                painter.drawRect(handle)
+                
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            pos = event.pos()
+            for handle_name, handle_rect in self.resize_handles.items():
+                if handle_rect.contains(pos):
+                    self.active_resize_handle = handle_name
+                    self.orginal_rect = self.rect()
+                    self.orginal_pos = self.pos()
+                    event.accept()
+                    return
+                
+            super().mousePressEvent(event)
+    
+    def mouseMoveEvent(self, event):
+        if self.active_resize_handle:
+            pos = event.pos()
+            rect = self.orginal_rect
+            new_rec = QRectF(rect)
+            
+            if self.active_resize_handle == 'top_left':
+                new_rec.setTopLeft(pos)
+            elif self.active_resize_handle == 'top_right':
+                new_rec.setTopRight(pos)
+            elif self.active_resize_handle == 'bottom_left':
+                new_rec.setBottomLeft(pos)
+            elif self.active_resize_handle == 'bottom_right':
+                new_rec.setBottomRight(pos)
+                
+        else:
+            super().mouseMoveEvent(event)
+    
+    def mouseReleaseEvent(self, event):
+        self.active_resize_handle = None
+        super().mouseReleaseEvent(event)
+    
+    def mouseDoubleClickEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.edit_label()
+            
+    def edit_label(self):
+        # Placeholder for label editing logic
+        print("Edit label functionality not implemented.")
 
 
 class TagHandler:
@@ -38,6 +120,7 @@ class TagHandler:
         toolbar.setIconSize(QSize(16, 16))
         
         add_tag_action = QAction(QIcon.fromTheme("edit-select-rectangle"), "Add Tag", self.main_window)
+        add_tag_action.setShortcut('T')
         add_tag_action.triggered.connect(self.start_drawing)
         
         delete_tag_action = QAction(QIcon.fromTheme("edit-delete"), "Delete Tag", self.main_window)
@@ -68,7 +151,6 @@ class TagHandler:
         self.original_mouse_release = self.main_window.graphics_view.mouseReleaseEvent
         self.original_key_press = self.main_window.keyPressEvent
 
-        # Connect our handlers
         self.main_window.graphics_view.mousePressEvent = self.mouse_press_event
         self.main_window.graphics_view.mouseMoveEvent = self.mouse_move_event
         self.main_window.graphics_view.mouseReleaseEvent = self.mouse_release_event
@@ -89,9 +171,8 @@ class TagHandler:
     def mouse_press_event(self, event):
         if self.drawing and event.button() == Qt.MouseButton.LeftButton:
             self.start_pos = self.main_window.graphics_view.mapToScene(event.pos())
-            self.current_rect = QGraphicsRectItem()
+            self.current_rect = ResizeRect()
             self.current_rect.setPen(QPen(QColor(255, 0, 0,), 2))
-            self.current_rect.setBrush(QBrush(QColor(255, 0, 0, 50)))
             self.current_rect.setPos(self.start_pos)
             self.main_window.scene.addItem(self.current_rect)
             
@@ -104,10 +185,6 @@ class TagHandler:
             width = end_pos.x() - self.start_pos.x()
             height = end_pos.y() - self.start_pos.y()
             
-            size = min(abs(width), abs(height))
-            width = size if width >= 0 else -size
-            height = size if height >= 0 else -size
-            
             self.current_rect.setRect(0,0,width, height)
         else:
             QGraphicsView.mouseMoveEvent(self.main_window.graphics_view, event)
@@ -117,10 +194,6 @@ class TagHandler:
             end_pos = self.main_window.graphics_view.mapToScene(event.pos())
             width = end_pos.x() - self.start_pos.x()
             height = end_pos.y() - self.start_pos.y()
-            
-            size = min(abs(width), abs(height))
-            width = size if width >= 0 else -size
-            height = size if height >= 0 else -size
             
             self.current_rect.setRect(0,0,width, height)
             
@@ -135,6 +208,8 @@ class TagHandler:
             
             self.start_pos = None
             self.current_rect = None
+            self.drawing = False
+            self.main_window.graphics_view.viewport().setCursor(Qt.CursorShape.ArrowCursor)
         else:
             QGraphicsView.mouseReleaseEvent(self.main_window.graphics_view, event)
     
@@ -162,7 +237,6 @@ class TagHandler:
                     rect_item = QGraphicsRectItem(0, 0, w, h)
                     rect_item.setPos(x,y)
                     rect_item.setPen(QPen(QColor(255,0,0), 2))
-                    rect_item.setBrush(QBrush(QColor(255,0,0,50)))
                     self.main_window.scene.addItem(rect_item)
                     
                     self.tags[int(tag_id)] = {
@@ -229,7 +303,6 @@ class TagHandler:
             self.tag_list.takeItem(self.tag_list.row(selected_item))
             self.main_window.statusBar.showMessage(f"Deleted tag: {tag_text}", 2000)
 
-    
     def clear_tags(self):
         for tag_id, tag_info in self.tags.items():
             self.main_window.scene.removeItem(tag_info['rect'])
@@ -249,10 +322,9 @@ class TagHandler:
                 self.tag_aciton.setIcon(QIcon.fromTheme("edit-select-rectangle-outline"))
             
         if mode:
-            self.main_window.graphics_view.setCursor(Qt.CursorShape.CrossCursor)
             self.main_window.statusBar.showMessage("Drawing mode enabled. Click to draw a tag", 2000)
         else:
-            self.main_window.graphics_view.setCursor(Qt.CursorShape.ArrowCursor)
+            self.main_window.graphics_view.viewport().setCursor(Qt.CursorShape.ArrowCursor)
             self.main_window.statusBar.showMessage("Drawing mode disabled", 2000)
             self.drawing = False
             if self.current_rect:
@@ -260,8 +332,16 @@ class TagHandler:
                 self.current_rect = None
             self.start_pos = None
             
-            
+    def set_tags_visible(self, visible):
+        for tag_id, tag_info in self.tags.items():
+            tag_info['rect'].setVisible(visible)
+        if visible:
+            self.main_window.statusBar.showMessage("Tags are now visible", 2000)
+        else:
+            self.main_window.statusBar.showMessage("Tags are now hidden", 2000)
+
     def start_drawing(self):
+        self.main_window.graphics_view.viewport().setCursor(Qt.CursorShape.CrossCursor)
         if self.tag_layer is None:
             self.main_window.vector_list.addItem("Tag Layer")
             self.tag_layer= True

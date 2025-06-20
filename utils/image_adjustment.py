@@ -65,6 +65,8 @@ class ImageAdjustment:
         return self.adjust_panel
     
     def rest_change_orginal(self):
+        if self.original_image is None:
+            return
         self.brightness_slider.setValue(0)
         self.contrast_slider.setValue(100)
         self.min_slider.setValue(0)
@@ -140,6 +142,8 @@ class ImageAdjustment:
         return np.clip(img, 0, 255).astype(np.uint8)
 
     def update_display(self, img):
+        if img == None:
+            return
         qimg = self.numpy_to_qimage(img)
         self.parent.image_item.setPixmap(QPixmap.fromImage(qimg))
 

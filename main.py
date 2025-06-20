@@ -90,12 +90,9 @@ class TifViewer(QMainWindow):
         self.vector_list.itemSelectionChanged.connect(self.handle_layer_selection)
         self.vector_list.itemSelectionChanged.connect(self.adjustment.handle_selected_layer)
         self.vector_list.setFont(QFont('Arial', 25))
-        add_btn = QAction(QIcon.fromTheme("document-open"), "Add Layer", self)
-        add_btn.triggered.connect(self.add_vector_layer)
         
         toolbar = QToolBar()
         toolbar.setIconSize(QSize(16,16))
-        toolbar.addAction(add_btn)
         
         dock_layout.addWidget(QLabel("Layers:"))
         dock_layout.addWidget(toolbar)
@@ -241,7 +238,7 @@ class TifViewer(QMainWindow):
                     f"<b>File:</b> {os.path.basename(pth)}<br>"
                     f"<b>Bands:</b> {num_bands}<br>"
                     f"<b>Size:</b> {width} × {height}<br>"
-                    f"<b>Cor System:</b> {crs if crs else '无'}<br>"
+                    f"<b>Cor System:</b> {crs if crs else 'None'}<br>"
                     f"<b>Bounds:</b> {bounds}"
                 )
                 
@@ -290,16 +287,15 @@ class TifViewer(QMainWindow):
     
     def handle_layer_selection(self):
         selected = self.vector_list.selectedItems()
-        log_layer_selected = "Log Layer" in [item.text() for item in selected]
+        selected_texts = [item.text() for item in selected]
+        log_layer_selected = "Log Layer" in selected_texts
+        tag_layer_selected = "Tag Layer" in selected_texts
         if self.log_transfer.log_item:
             self.log_transfer.log_item.setVisible(log_layer_selected)
-    
-    def add_vector_layer(self):
-        pass
-    
-    def draw_vector_layers(self):
-        pass
         
+        if self.tag_handler.tag_list is not None:
+            self.tag_handler.set_tags_visible(tag_layer_selected)
+            
     def zoom_out(self):
         center = self.graphics_view.mapToScene(self.graphics_view.viewport().rect().center())
         self.graphics_view.scale(1/1.2, 1/1.2)
