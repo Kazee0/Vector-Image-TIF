@@ -1,8 +1,7 @@
 import sys
 import os
 import numpy as np
-import rasterio, cv2
-from rasterio.plot import show
+import cv2
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 from PyQt6.QtWidgets import(
@@ -12,7 +11,7 @@ from PyQt6.QtWidgets import(
     QGraphicsScene, QGraphicsPixmapItem
 )
 from PyQt6.QtGui import QAction, QIcon, QPainter, QImage, QPixmap, QFont
-from PyQt6.QtCore import Qt, QSize, QRectF, QEvent
+from PyQt6.QtCore import Qt, QSize, QEvent
 from utils.log_transfer import LogTransfer
 from core.tagging_system import TagHandler
 from utils.image_adjustment import ImageAdjustment
@@ -138,13 +137,6 @@ class TifViewer(QMainWindow):
         adjust_action.triggered.connect(self.toggle_adjustment)
         
         toolbar.addAction(adjust_action)
-        tag_action = QAction(QIcon.fromTheme("edit-select-rectangle"), "Tag Mode", self)
-        tag_action.setShortcut("Ctrl+T")
-        tag_action.setCheckable(True)
-        tag_action.triggered.connect(self.tag_handler.set_drawing_mode)
-        self.tag_handler.set_tag_action(tag_action)
-        
-        toolbar.addAction(tag_action)
         toolbar.addSeparator()
         
         exit_action = QAction(QIcon.fromTheme("application-exit"), "Exit", self)
@@ -184,8 +176,6 @@ class TifViewer(QMainWindow):
         try: 
             if not self.scene.items():
                 raise ValueError("场景中没有图像")
-            
-            pixmap_item = self.scene.items()[0]
             qimage = self.image_item.pixmap().toImage()
 
             if qimage.format() not in (QImage.Format.Format_RGB888, QImage.Format.Format_RGBA8888):
@@ -224,67 +214,59 @@ class TifViewer(QMainWindow):
     def load_tif_file(self, pth):
         try:
             self.scene.clear()
-            self.image_item=QGraphicsPixmapItem()
+            self.image_item = QGraphicsPixmapItem()
             self.scene.addItem(self.image_item)
             
-            with rasterio.open(pth) as src:
-                num_bands = src.count
-                width = src.width
-                height = src.height
-                crs = src.crs
-                transform = src.transform
-                bounds = src.bounds
-                info = (
-                    f"<b>File:</b> {os.path.basename(pth)}<br>"
-                    f"<b>Bands:</b> {num_bands}<br>"
-                    f"<b>Size:</b> {width} × {height}<br>"
-                    f"<b>Cor System:</b> {crs if crs else 'None'}<br>"
-                    f"<b>Bounds:</b> {bounds}"
-                )
+            img = cv2.imread(pth, cv2.IMREAD_ANYDEPTH | cv2.IMREAD_ANYCOLOR)
+            
+            if img is None:
+                raise ValueError("Failed to load image. Check if the file is corrupted or unsupported.")
+            
+            height, width = img.shape[:2]
+            num_channels = img.shape[2] if len(img.shape) == 3 else 1
+            
+            info = (
+                f"<b>File:</b> {os.path.basename(pth)}<br>"
+                f"<b>Channels:</b> {num_channels}<br>"
+                f"<b>Size:</b> {width} × {height}<br>"
+            )
+            
+            self.info_label.setText(info)
+            
+            if num_channels >= 3:
+                img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                if img_rgb.dtype != np.uint8:
+                    img_rgb = cv2.normalize(img_rgb, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
                 
-                self.info_label.setText(info)
+                bytes_per_line = 3 * width
+                qimage = QImage(img_rgb.data, width, height, bytes_per_line, QImage.Format.Format_RGB888)
+            else:
+                if img.dtype != np.uint8:
+                    img = cv2.normalize(img, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
                 
-                if num_bands >= 3:
-                    red = src.read(1)
-                    green = src.read(2)
-                    blue = src.read(3)
-                    img = np.dstack((red, green, blue))
-                    img = (img*255.0 / img.max()).astype(np.uint8)
-
-                    height, width,_ = img.shape
-                    bytes_per_line = 3*width
-                    qimage = QImage(img.data, width, height, bytes_per_line, QImage.Format.Format_RGBA8888)
-                    
-                else:
-                    img = src.read(1)
-                    img = (img*255.0 / img.max()).astype(np.uint8)
-                    height, width = img.shape
-                    qimage=QImage(img.data, width, height, width, QImage.Format.Format_Grayscale8)
-                self.adjustment.set_original_image(img)
-                
-                pixmap = QPixmap.fromImage(qimage)
-                self.image_item.setPixmap(pixmap)
-                
-                self.current_transform = transform
-                self.current_bounds = bounds
-                reply = QMessageBox.question(self, 'Log', 'Create log layer?', QMessageBox.StandardButton.Yes|QMessageBox.StandardButton.No)
-                if self.log_transfer.log_item is None and reply == QMessageBox.StandardButton.Yes:
-                    if num_bands>= 3:
-                        img_arr = np.dstack((src.read(1), src.read(2), src.read(3)))
-                    else:
-                        img_arr = src.read(1)
-                    self.log_transfer.log_item, log_i = self.log_transfer.create_log_layer(self.scene, img_arr, src.width, src.height)
-                    self.adjustment.set_log_image(log_i)
-                    self.vector_list.addItem('Log Layer')
-                self.statusBar.showMessage(f"Loaded: {pth}", 3000)
-                
-                self.graphics_view.fitInView(self.image_item, Qt.AspectRatioMode.KeepAspectRatio)
-        
+                qimage = QImage(img.data, width, height, width, QImage.Format.Format_Grayscale8)
+            
+            self.adjustment.set_original_image(img)
+            
+            pixmap = QPixmap.fromImage(qimage)
+            self.image_item.setPixmap(pixmap)
+            reply = QMessageBox.question(self, 'Log', 'Create log layer?', QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            if self.log_transfer.log_item is None and reply == QMessageBox.StandardButton.Yes:
+                img_arr = img_rgb if num_channels >= 3 else img
+                self.log_transfer.log_item, log_i = self.log_transfer.create_log_layer(
+                    self.scene, img_arr, width, height)
+                self.adjustment.set_log_image(log_i)
+                self.vector_list.addItem('Log Layer')
+            
+            self.statusBar.showMessage(f"Loaded: {pth}", 3000)
+            self.graphics_view.fitInView(self.image_item, Qt.AspectRatioMode.KeepAspectRatio)
+            
         except Exception as e:
             print(str(e))
             self.info_label.setText(f"<b>Error:</b> {str(e)}")
             self.statusBar.showMessage(f"Error: {str(e)}", 5000)
-    
+            
+
     def handle_layer_selection(self):
         selected = self.vector_list.selectedItems()
         selected_texts = [item.text() for item in selected]
