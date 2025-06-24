@@ -142,7 +142,7 @@ class ImageAdjustment:
         return np.clip(img, 0, 255).astype(np.uint8)
 
     def update_display(self, img):
-        if img == None:
+        if img is None or img.size == 0:
             return
         qimg = self.numpy_to_qimage(img)
         self.parent.image_item.setPixmap(QPixmap.fromImage(qimg))

@@ -2,8 +2,6 @@ import sys
 import os
 import numpy as np
 import cv2
-from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.figure import Figure
 from PyQt6.QtWidgets import(
     QApplication, QMainWindow, QFileDialog, QVBoxLayout, QWidget,
     QLabel, QHBoxLayout, QToolBar, QStatusBar,
@@ -175,7 +173,7 @@ class TifViewer(QMainWindow):
             filepath+='.tif'
         try: 
             if not self.scene.items():
-                raise ValueError("场景中没有图像")
+                raise ValueError("No present Image")
             qimage = self.image_item.pixmap().toImage()
 
             if qimage.format() not in (QImage.Format.Format_RGB888, QImage.Format.Format_RGBA8888):
