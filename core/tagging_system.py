@@ -7,85 +7,165 @@ class ResizeRect(QGraphicsRectItem):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.setAcceptHoverEvents(True)
-        self.setFlag(QGraphicsRectItem.GraphicsItemFlag.ItemIsMovable, True)
         self.setFlag(QGraphicsRectItem.GraphicsItemFlag.ItemIsSelectable, True)
         self.setFlag(QGraphicsRectItem.GraphicsItemFlag.ItemSendsGeometryChanges, True)
-        self.setPen(QPen(QColor(255,0,0), 2))
+        
+
+        self.normal_pen = QPen(QColor(255, 0, 0), 2)
+        self.selected_pen = QPen(QColor(0, 255, 0), 3)  
+
+        self.setPen(self.normal_pen)
         
         self.resize_handles = {
-            'top_left': None,
-            'top_right': None,
-            'bottom_left': None,
-            'bottom_right': None,
+            'top_left': QRectF(0, 0, 10, 10),
+            'top_right': QRectF(0, 0, 10, 10),
+            'bottom_left': QRectF(0, 0, 10, 10),
+            'bottom_right': QRectF(0, 0, 10, 10)
         }
         self.active_resize_handle = None
-        self.orginal_rect = QRectF()
-        self.orginal_pos = QPoint()
-        self.update_resize_handles()
+        self.original_rect = QRectF()
+        self.original_pos = QPointF()
+        self.original_mouse_pos = QPointF()
+        self.is_moving = False
         
-        self.cursors = {
+        self.cursor_shapes = {
             'top_left': Qt.CursorShape.SizeFDiagCursor,
+            'top_right': Qt.CursorShape.SizeBDiagCursor,
+            'bottom_left': Qt.CursorShape.SizeBDiagCursor,
+            'bottom_right': Qt.CursorShape.SizeFDiagCursor
         }
     
     def update_resize_handles(self):
         rect = self.rect()
-        self.resize_handles['top_left'] = QRectF(rect.topLeft(), QSizeF(10, 10))
-        self.resize_handles['top_right'] = QRectF(rect.topRight() - QPointF(10, 0), QSizeF(10, 10))
-        self.resize_handles['bottom_left'] = QRectF(rect.bottomLeft() - QPointF(0, 10), QSizeF(10, 10))
-        self.resize_handles['bottom_right'] = QRectF(rect.bottomRight() - QPointF(10, 10), QSizeF(10, 10))
+        handle_size = 10
+        half_handle = handle_size / 2
+        
+        self.resize_handles['top_left'] = QRectF(-half_handle, -half_handle, handle_size, handle_size)
+        self.resize_handles['top_right'] = QRectF(rect.width() - half_handle, -half_handle, handle_size, handle_size)
+        self.resize_handles['bottom_left'] = QRectF(-half_handle, rect.height() - half_handle, handle_size, handle_size)
+        self.resize_handles['bottom_right'] = QRectF(rect.width() - half_handle, rect.height() - half_handle, handle_size, handle_size)
+    
+    def hoverMoveEvent(self, event):
+        if not self.isSelected():
+            self.setCursor(Qt.CursorShape.ArrowCursor)
+            super().hoverMoveEvent(event)
+            return
+            
+        pos = event.pos()
+        for handle_name, handle_rect in self.resize_handles.items():
+            if handle_rect.contains(pos):
+                self.setCursor(self.cursor_shapes[handle_name])
+                event.accept()
+                return
+        
+        self.setCursor(Qt.CursorShape.SizeAllCursor)
+        super().hoverMoveEvent(event)
     
     def paint(self, painter, option, widget):
-        super().paint(painter,option,widget)
-        
         if self.isSelected():
-            painter.setPen(QPen(QColor(0,0,0), 1))
+            self.setPen(self.selected_pen)
+        else:
+            self.setPen(self.normal_pen)    
+        super().paint(painter, option, widget)
+
+        if self.isSelected():
+            painter.setPen(QPen(QColor(0, 0, 0), 5))
+            painter.setBrush(QColor(255, 255, 0))  # 黄色调整手柄
+            
+            self.update_resize_handles()
+            
             for handle in self.resize_handles.values():
                 painter.drawRect(handle)
-                
+    
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
+            if not self.isSelected():
+                self.setSelected(True)
+            
             pos = event.pos()
+
             for handle_name, handle_rect in self.resize_handles.items():
                 if handle_rect.contains(pos):
                     self.active_resize_handle = handle_name
-                    self.orginal_rect = self.rect()
-                    self.orginal_pos = self.pos()
+                    self.original_rect = self.rect()
+                    self.original_pos = self.pos()
+                    self.original_mouse_pos = self.mapToScene(event.pos())
                     event.accept()
                     return
-                
+            
+            self.is_moving = True
+            self.original_pos = self.pos()
+            self.original_mouse_pos = self.mapToScene(event.pos())
+            event.accept()
+        else:
             super().mousePressEvent(event)
     
     def mouseMoveEvent(self, event):
         if self.active_resize_handle:
-            pos = event.pos()
-            rect = self.orginal_rect
-            new_rec = QRectF(rect)
+            current_mouse_pos = self.mapToScene(event.pos())
+            delta = current_mouse_pos - self.original_mouse_pos
+            
+            new_rect = QRectF(self.original_rect)
+            new_pos = QPointF(self.original_pos)
             
             if self.active_resize_handle == 'top_left':
-                new_rec.setTopLeft(pos)
+                new_rect.setLeft(self.original_rect.left() + delta.x())
+                new_rect.setTop(self.original_rect.top() + delta.y())
+                new_pos = self.original_pos + delta
             elif self.active_resize_handle == 'top_right':
-                new_rec.setTopRight(pos)
+                new_rect.setRight(self.original_rect.right() + delta.x())
+                new_rect.setTop(self.original_rect.top() + delta.y())
             elif self.active_resize_handle == 'bottom_left':
-                new_rec.setBottomLeft(pos)
+                new_rect.setLeft(self.original_rect.left() + delta.x())
+                new_rect.setBottom(self.original_rect.bottom() + delta.y())
             elif self.active_resize_handle == 'bottom_right':
-                new_rec.setBottomRight(pos)
-                
+                new_rect.setRight(self.original_rect.right() + delta.x())
+                new_rect.setBottom(self.original_rect.bottom() + delta.y())
+            
+            if new_rect.width() < 10:
+                if self.active_resize_handle in ['top_left', 'bottom_left']:
+                    new_rect.setLeft(new_rect.right() - 10)
+                    new_pos.setX(self.original_pos.x() + self.original_rect.width() - 10)
+                else:
+                    new_rect.setRight(new_rect.left() + 10)
+            
+            if new_rect.height() < 10:
+                if self.active_resize_handle in ['top_left', 'top_right']:
+                    new_rect.setTop(new_rect.bottom() - 10)
+                    new_pos.setY(self.original_pos.y() + self.original_rect.height() - 10)
+                else:
+                    new_rect.setBottom(new_rect.top() + 10)
+            
+            self.setRect(new_rect)
+            
+            if self.active_resize_handle == 'top_left':
+                self.setPos(new_pos)
+            
+            event.accept()
+        elif self.is_moving:
+            current_mouse_pos = self.mapToScene(event.pos())
+            delta = current_mouse_pos - self.original_mouse_pos
+            self.setPos(self.original_pos + delta)
+            event.accept()
         else:
             super().mouseMoveEvent(event)
     
     def mouseReleaseEvent(self, event):
-        self.active_resize_handle = None
-        super().mouseReleaseEvent(event)
-    
-    def mouseDoubleClickEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
-            self.edit_label()
+            self.active_resize_handle = None
+            self.is_moving = False
+            event.accept()
+        else:
+            super().mouseReleaseEvent(event)
+    
+    def focusInEvent(self, event):
+        self.setSelected(True)
+        super().focusInEvent(event)
+    
+    def focusOutEvent(self, event):
+        self.setSelected(False)
+        super().focusOutEvent(event)
             
-    def edit_label(self):
-        # Placeholder for label editing logic
-        print("Edit label functionality not implemented.")
-
-
 class TagHandler:
     def __init__(self, main_window):
         self.main_window = main_window
@@ -94,6 +174,7 @@ class TagHandler:
         self.tag_list = None
         self.tag_dock = None
         self.drawing = False
+        self.is_dirty = False
         self.current_rect = None
         self.start_pos = None
         self.tag_scene = None
@@ -206,6 +287,7 @@ class TagHandler:
             
             self.tag_list.addItem(f"Tag-{tag_id}")
             
+            self.is_dirty = True
             self.start_pos = None
             self.current_rect = None
             self.drawing = False
@@ -247,9 +329,12 @@ class TagHandler:
                     self.tag_list.addItem(label)
                 
                 self.main_window.statusBar.showMessage(f"Loaded {len(data)} tags from {file_path}", 3000)
-            
+                self.is_dirty = False
             except Exception as e:
                 QMessageBox.critical(self.main_window, "Error", f"Failed to load tags:{str(e)}")
+    
+    def check_if_dirty(self):
+        return self.is_dirty
     
     def save_tags(self):
         if not self.tags:
@@ -279,10 +364,12 @@ class TagHandler:
                     import json
                     json.dump(data, f, indent=2)
                     self.main_window.statusBar.showMessage(f"Saved {len(data)} tags to {file_pth}", 3000)
+                self.is_dirty = False
             except Exception as e:
                 QMessageBox.critical(self.main_window, "Error", f"Failed to save tags: {str(e)}")
                 
     def delete_selected_tag(self):
+        self.is_dirty = True
         selected_items = self.tag_list.selectedItems()
         if not selected_items:
             QMessageBox.warning(self.main_window, "Warning", "No tag selected to delete")
@@ -351,16 +438,28 @@ class TagHandler:
     def handle_tag_selection(self):
         selected_items = self.tag_list.selectedItems()
         if not selected_items:
+            # Deselect all tags when nothing is selected
+            for tag_id, tag_info in self.tags.items():
+                tag_info['rect'].setSelected(False)
             return
-        
+            
         selected_item = selected_items[0]
         tag_text = selected_item.text()
         
         for tag_id, tag_info in self.tags.items():
             if tag_info['label'] == tag_text:
-                tag_info['rect'].setPen(QPen(QColor(0, 255, 0), 2))
+                tag_info['rect'].setSelected(True)
                 self.main_window.graphics_view.centerOn(tag_info['rect'])
-                
             else:
-                tag_info['rect'].setPen(QPen(QColor(255, 0, 0), 2))
-        
+                tag_info['rect'].setSelected(False)
+    
+    def clear_tag_layer(self):
+        if self.tag_layer:
+            for tag_id, tag_info in self.tags.items():
+                self.main_window.scene.removeItem(tag_info['rect'])
+            self.tags.clear()
+            self.tag_list.clear()
+            self.tag_layer = None
+            self.main_window.statusBar.showMessage("Tag layer cleared", 2000)
+        else:
+            QMessageBox.warning(self.main_window, "Warning", "No tag layer to clear")

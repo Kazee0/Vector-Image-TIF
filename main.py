@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import(
     QDockWidget, QListWidget, QMessageBox, QGraphicsView,
     QGraphicsScene, QGraphicsPixmapItem
 )
-from PyQt6.QtGui import QAction, QIcon, QPainter, QImage, QPixmap, QFont
+from PyQt6.QtGui import QAction, QIcon, QPainter, QImage, QPixmap, QFont, QShortcut, QKeySequence
 from PyQt6.QtCore import Qt, QSize, QEvent
 from utils.log_transfer import LogTransfer
 from core.tagging_system import TagHandler
@@ -38,6 +38,8 @@ class TifViewer(QMainWindow):
         return super().eventFilter(source, event)
     
     def init_ui(self):
+        self.shortcut = QShortcut(QKeySequence("Ctrl+W"), self)
+        self.shortcut.activated.connect(self.close)
         self.main_widget = QWidget()
         self.setCentralWidget(self.main_widget)
         
@@ -138,12 +140,7 @@ class TifViewer(QMainWindow):
         
         toolbar.addAction(adjust_action)
         toolbar.addSeparator()
-        
-        exit_action = QAction(QIcon.fromTheme("application-exit"), "Exit", self)
-        exit_action.setShortcut("Ctrl+Q")
-        exit_action.triggered.connect(QApplication.quit)
-        toolbar.addAction(exit_action)
-        toolbar.addSeparator()
+
         
         prev_action = QAction(QIcon.fromTheme("go-previous"), "Previous Image", self)
         prev_action.setShortcut("Ctrl+Left")
@@ -195,6 +192,9 @@ class TifViewer(QMainWindow):
             self.vector_list.clear()
             self.log_transfer.log_item = None
             self.adjustment.log_img = None
+        
+        if self.tag_handler.tag_list is not None:
+            self.tag_handler.clear_tags()
             
         if self.current_index >= len(self.files):
             QMessageBox.information(self, "Info", "No more images available.")
@@ -208,6 +208,17 @@ class TifViewer(QMainWindow):
         if not self.folder or not os.path.isdir(self.folder) or not self.files:
             QMessageBox.information(self, "Info", "Please open a folder first.")
             return
+        
+        if self.log_transfer.log_item:
+            print("Clearing log layer and vector list")
+            self.log_transfer.clear_log_layer()
+            self.vector_list.clear()
+            self.log_transfer.log_item = None
+            self.adjustment.log_img = None
+        
+        if self.tag_handler.tag_list is not None:
+            self.tag_handler.clear_tags()
+            
         self.current_index -= 1
         if self.current_index <= 0:
             QMessageBox.information(self, "Info", "No previous image available.")
@@ -230,9 +241,17 @@ class TifViewer(QMainWindow):
 
     def load_tif_file(self, pth):
         try:
-            self.scene.clear()
-            self.image_item = QGraphicsPixmapItem()
-            self.scene.addItem(self.image_item)
+            if self.log_transfer.log_item:
+                self.log_transfer.clear_log_layer()
+                self.vector_list.clear()
+                self.log_transfer.log_item = None
+                self.adjustment.log_img = None
+        
+            if self.tag_handler.tag_list is not None:
+                self.tag_handler.clear_tags()
+                self.scene.clear()
+                self.image_item = QGraphicsPixmapItem()
+                self.scene.addItem(self.image_item)
             
             img = cv2.imread(pth, cv2.IMREAD_ANYDEPTH | cv2.IMREAD_ANYCOLOR)
             
@@ -309,6 +328,11 @@ class TifViewer(QMainWindow):
         if hasattr(self, 'image_item'):
             self.graphics_view.fitInView(self.image_item, Qt.AspectRatioMode.KeepAspectRatio)
     
+    def needs_to_save_tags(self):
+        if hasattr(self, 'tag_handler') and self.tag_handler.is_dirty:
+            return True
+        return False
+    
     def wheelEvent(self,event):
         if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
             zoom_factor = 1.15 if event.angleDelta().y() > 0 else 1/1.15
@@ -323,6 +347,21 @@ class TifViewer(QMainWindow):
             event.accept()
         else:
             super().wheelEvent(event)
+    
+    def closeEvent(self, event):
+        if self.needs_to_save_tags():
+            reply = QMessageBox.question(self, "Save Tags", 
+                                         "You have unsaved tags. Do you want to save them before exiting?",
+                                         QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No| QMessageBox.StandardButton.Cancel)
+            if reply == QMessageBox.StandardButton.Yes:
+                self.tag_handler.save_tags()
+                event.accept()
+            elif reply == QMessageBox.StandardButton.No:
+                event.accept()
+            else:
+                event.ignore()
+        else:
+            event.accept()
     
 if __name__ == "__main__":
     app = QApplication(sys.argv)
