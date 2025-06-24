@@ -59,3 +59,11 @@ class LogTransfer:
             self.log_visible = not self.log_visible
             self.log_item.setVisible(self.log_visible)
         return self.log_visible
+    
+    def clear_log_layer(self):
+        if self.log_item:
+            self.log_item.setVisible(False)
+            self.log_item = None
+            self.log_layer = None
+            self.log_visible = False
+        return self.log_visible

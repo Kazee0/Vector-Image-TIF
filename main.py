@@ -188,6 +188,14 @@ class TifViewer(QMainWindow):
         if not self.folder or not os.path.isdir(self.folder) or not self.files:
             QMessageBox.information(self, "Info", "Please open a folder first.")
             return
+        
+        if self.log_transfer.log_item:
+            print("Clearing log layer and vector list")
+            self.log_transfer.clear_log_layer()
+            self.vector_list.clear()
+            self.log_transfer.log_item = None
+            self.adjustment.log_img = None
+            
         if self.current_index >= len(self.files):
             QMessageBox.information(self, "Info", "No more images available.")
             return

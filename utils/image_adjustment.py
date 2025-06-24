@@ -191,3 +191,4 @@ class ImageAdjustment:
             return arr[:, :width]
         else:
             raise ValueError(f"Unsupported image format: {qimage.format()}")
+    
