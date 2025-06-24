@@ -22,6 +22,7 @@ class TifViewer(QMainWindow):
         
         self.current_path = None
         self.folder = None
+        self.files = None
         self.vector_layers = {}
         self.active_vector_layers = set()
         self.log_transfer = LogTransfer()
@@ -184,7 +185,7 @@ class TifViewer(QMainWindow):
             self.next_image()
         
     def next_image(self):
-        if not self.folder or not os.path.isdir(self.folder):
+        if not self.folder or not os.path.isdir(self.folder) or not self.files:
             QMessageBox.information(self, "Info", "Please open a folder first.")
             return
         if self.current_index >= len(self.files):
@@ -196,7 +197,7 @@ class TifViewer(QMainWindow):
         self.current_index+=1
         
     def prev_image(self):
-        if not self.folder or not os.path.isdir(self.folder):
+        if not self.folder or not os.path.isdir(self.folder) or not self.files:
             QMessageBox.information(self, "Info", "Please open a folder first.")
             return
         self.current_index -= 1
@@ -205,8 +206,6 @@ class TifViewer(QMainWindow):
             return
         prev_file = os.path.join(self.folder, self.files[self.current_index])
         self.load_tif_file(prev_file)
-        
-        
 
     def open_file(self):
         file_pth, _ = QFileDialog.getOpenFileName(
