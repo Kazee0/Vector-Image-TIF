@@ -21,7 +21,7 @@ class TifViewer(QMainWindow):
         self.setWindowTitle("TIF Viewer")
         
         self.current_path = None
-        
+        self.folder = None
         self.vector_layers = {}
         self.active_vector_layers = set()
         self.log_transfer = LogTransfer()
@@ -108,10 +108,11 @@ class TifViewer(QMainWindow):
         open_action.triggered.connect(self.open_file)
         toolbar.addAction(open_action)
         
-        save_action = QAction(QIcon.fromTheme("document-save"),"Save", self)
-        save_action.setShortcut("Ctrl+S")
-        save_action.triggered.connect(self.save_file)
-        toolbar.addAction(save_action)
+        open_folder = QAction(QIcon.fromTheme("folder-open"), "Open Folder", self)
+        open_folder.setShortcut("Ctrl+Shift+O")
+        open_folder.triggered.connect(self.open_folder)
+        toolbar.addAction(open_folder)
+
         toolbar.addSeparator()
         
         zoom_in_action = QAction(QIcon.fromTheme("zoom-in"), "Zoom In", self)
@@ -141,6 +142,19 @@ class TifViewer(QMainWindow):
         exit_action.setShortcut("Ctrl+Q")
         exit_action.triggered.connect(QApplication.quit)
         toolbar.addAction(exit_action)
+        toolbar.addSeparator()
+        
+        prev_action = QAction(QIcon.fromTheme("go-previous"), "Previous Image", self)
+        prev_action.setShortcut("Ctrl+Left")
+        prev_action.triggered.connect(self.prev_image)
+        toolbar.addAction(prev_action)
+        
+        next_action = QAction(QIcon.fromTheme("go-next"), "Next Image", self)
+        next_action.setShortcut("Ctrl+Right")
+        next_action.triggered.connect(self.next_image)
+        toolbar.addAction(next_action)
+        
+        toolbar.addSeparator()
         
     def toggle_adjustment(self):
 
@@ -152,62 +166,60 @@ class TifViewer(QMainWindow):
             self.adjust_dock.setVisible(True)
         else:
             self.adjust_dock.setVisible(not self.adjust_dock.isVisible())
-            
+
+    def open_folder(self):
+        folder_pth = QFileDialog.getExistingDirectory(self, "Select Folder")
+        if folder_pth:
+            self.folder = folder_pth
+            self.current_file = None
+            self.vector_layers.clear()
+            self.vector_list.clear()
+            self.active_vector_layers.clear()
+            self.statusBar.showMessage(f"Opened folder: {folder_pth}", 3000)
+            self.files = [f for f in os.listdir(self.folder) if f.lower().endswith(('.tif', '.tiff'))]
+            self.current_index = 0
+            if not self.files:
+                QMessageBox.information(self, "Info", "No TIF files found in the folder.")
+                return
+            self.next_image()
+        
+    def next_image(self):
+        if not self.folder or not os.path.isdir(self.folder):
+            QMessageBox.information(self, "Info", "Please open a folder first.")
+            return
+        if self.current_index >= len(self.files):
+            QMessageBox.information(self, "Info", "No more images available.")
+            return
+        
+        next_file = os.path.join(self.folder, self.files[self.current_index])
+        self.load_tif_file(next_file)
+        self.current_index+=1
+        
+    def prev_image(self):
+        if not self.folder or not os.path.isdir(self.folder):
+            QMessageBox.information(self, "Info", "Please open a folder first.")
+            return
+        self.current_index -= 1
+        if self.current_index <= 0:
+            QMessageBox.information(self, "Info", "No previous image available.")
+            return
+        prev_file = os.path.join(self.folder, self.files[self.current_index])
+        self.load_tif_file(prev_file)
+        
+        
+
     def open_file(self):
         file_pth, _ = QFileDialog.getOpenFileName(
             self, "","","TIF Files (*.tif *.tiff);;All (*)"
         )
         if file_pth:
             self.current_path = file_pth
+            self.folder = os.path.dirname(file_pth)
+            self.current_file = os.path.basename(file_pth)
             self.vector_layers.clear()
             self.vector_list.clear()
             self.active_vector_layers.clear()
             self.load_tif_file(file_pth)
-            
-    def save_file(self):
-        filepath, filetype = QFileDialog.getSaveFileName(self, "",self.current_path, "TIFF Files(*tif)")
-        print(filepath, filetype)
-        if not filepath:
-            return
-        if not filepath.lower().endswith(('.tif','.tiff')):
-            filepath+='.tif'
-        try: 
-            if not self.scene.items():
-                raise ValueError("No present Image")
-            qimage = self.image_item.pixmap().toImage()
-
-            if qimage.format() not in (QImage.Format.Format_RGB888, QImage.Format.Format_RGBA8888):
-                qimage = qimage.convertToFormat(QImage.Format.Format_RGB888)
-            
-
-            width = qimage.width()
-            height = qimage.height()
-            bytes_per_line = qimage.bytesPerLine()
-            channels = 4 if qimage.hasAlphaChannel() else 3
-            
-            ptr = qimage.bits()
-            ptr.setsize(height * bytes_per_line)
-            arr = np.frombuffer(ptr, np.uint8)
-            
-            if bytes_per_line == width * channels:
-                arr = arr.reshape((height, width, channels))
-            else:
-                arr = arr.reshape((height, bytes_per_line))[:, :width*channels]
-                arr = arr.reshape((height, width, channels))
-
-            if channels == 3:
-                cv_image = cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
-            elif channels == 4:
-                cv_image = cv2.cvtColor(arr, cv2.COLOR_RGBA2BGRA)
-            else:
-                cv_image = arr
-            if not cv2.imwrite(filepath, cv_image):
-                raise ValueError("Saving Filed")
-                
-            QMessageBox.information(self, "Success", f"Image Saved:\n{filepath}")
-            self.cwd = os.path.dirname(filepath)
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Image Error:\n{str(e)}")
 
     def load_tif_file(self, pth):
         try:
