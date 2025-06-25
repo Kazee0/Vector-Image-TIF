@@ -184,7 +184,8 @@ class ResizeRect(QGraphicsRectItem):
     
     def focusOutEvent(self, event):
         self.setSelected(False)
-        super().focusOutEvent(event)           
+        super().focusOutEvent(event)
+
 class TagHandler:
     def __init__(self, main_window):
         self.main_window = main_window
@@ -331,26 +332,28 @@ class TagHandler:
                 
                 self.clear_tags()
                 
-                for tag_id, tag_data in data.items():
-                    x,y,w,h = tag_data['coords']
-                    id = tag_data['label']
+                for tag_key, tag_data in data.items():
+                    x, y, w, h = tag_data['coords']
+                    label = tag_data['label']
                     
-                    rect_item = QGraphicsRectItem(0, 0, w, h)
-                    rect_item.setPos(x,y)
-                    rect_item.setPen(QPen(QColor(255,0,0), 2))
+                    rect_item = ResizeRect(0, 0, w, h)  
+                    rect_item.setPos(x, y)
+                    rect_item.setPen(QPen(QColor(255, 0, 0), 2))
                     self.main_window.scene.addItem(rect_item)
                     
-                    self.tags[int(tag_id)] = {
-                        'rect':rect_item,
-                        'coords':(x,y,w,h),
-                        'label':id
+                    tag_id = hash(tag_key)
+                    
+                    self.tags[tag_id] = {
+                        'rect': rect_item,
+                        'coords': (x, y, w, h),
+                        'label': label
                     }
-                    self.tag_list.addItem(label)
+                    self.tag_list.addItem(label) 
                 
                 self.main_window.statusBar.showMessage(f"Loaded {len(data)} tags from {file_path}", 3000)
                 self.is_dirty = False
             except Exception as e:
-                QMessageBox.critical(self.main_window, "Error", f"Failed to load tags:{str(e)}")
+                QMessageBox.critical(self.main_window, "Error", f"Failed to load tags: {str(e)}")
     
     def check_if_dirty(self):
         return self.is_dirty
@@ -370,20 +373,23 @@ class TagHandler:
         if file_pth:
             try:
                 if not file_pth.lower().endswith('.json'):
-                    file_pth+='.json'
+                    file_pth += '.json'
                     
                 data = {}
                 for tag_id, tag_info in self.tags.items():
-                    data[str(tag_info)] ={
+                    serializable_tag = {
                         'coords': tag_info['coords'],
-                        'label':tag_info['label']
+                        'label': tag_info['label']
                     }
+                    key = f"{tag_info['label']}_{tag_info['coords'][0]}_{tag_info['coords'][1]}"
+                    data[key] = serializable_tag
 
                 with open(file_pth, "w") as f:
                     import json
                     json.dump(data, f, indent=2)
                     self.main_window.statusBar.showMessage(f"Saved {len(data)} tags to {file_pth}", 3000)
                 self.is_dirty = False
+                self.clear_tag_layer()
             except Exception as e:
                 QMessageBox.critical(self.main_window, "Error", f"Failed to save tags: {str(e)}")
                 

@@ -237,6 +237,8 @@ class TifViewer(QMainWindow):
             self.current_file = os.path.basename(file_pth)
             self.vector_layers.clear()
             self.vector_list.clear()
+            if TagHandler is not None:
+                self.tag_handler.clear_tags()
             self.active_vector_layers.clear()
             self.load_tif_file(file_pth)
 
