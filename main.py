@@ -44,7 +44,7 @@ class TifViewer(QMainWindow):
         self.setCentralWidget(self.main_widget)
         
         self.main_layout = QHBoxLayout(self.main_widget)
-        self.main_layout.setContentsMargins(2,2,2,2)
+        self.main_layout.setContentsMargins(2, 2, 2, 2)
         
         self.init_layer_dock()
         
@@ -230,6 +230,7 @@ class TifViewer(QMainWindow):
         file_pth, _ = QFileDialog.getOpenFileName(
             self, "","","TIF Files (*.tif *.tiff);;All (*)"
         )
+        
         if file_pth:
             self.current_path = file_pth
             self.folder = os.path.dirname(file_pth)

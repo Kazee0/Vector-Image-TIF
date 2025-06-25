@@ -10,10 +10,8 @@ class ResizeRect(QGraphicsRectItem):
         self.setFlag(QGraphicsRectItem.GraphicsItemFlag.ItemIsSelectable, True)
         self.setFlag(QGraphicsRectItem.GraphicsItemFlag.ItemSendsGeometryChanges, True)
         
-
         self.normal_pen = QPen(QColor(255, 0, 0), 2)
         self.selected_pen = QPen(QColor(0, 255, 0), 3)  
-
         self.setPen(self.normal_pen)
         
         self.resize_handles = {
@@ -36,14 +34,36 @@ class ResizeRect(QGraphicsRectItem):
         }
     
     def update_resize_handles(self):
+        """Update handle positions relative to the current rectangle"""
         rect = self.rect()
         handle_size = 10
         half_handle = handle_size / 2
         
-        self.resize_handles['top_left'] = QRectF(-half_handle, -half_handle, handle_size, handle_size)
-        self.resize_handles['top_right'] = QRectF(rect.width() - half_handle, -half_handle, handle_size, handle_size)
-        self.resize_handles['bottom_left'] = QRectF(-half_handle, rect.height() - half_handle, handle_size, handle_size)
-        self.resize_handles['bottom_right'] = QRectF(rect.width() - half_handle, rect.height() - half_handle, handle_size, handle_size)
+        # Calculate handle positions in local coordinates
+        self.resize_handles['top_left'] = QRectF(
+            rect.left() - half_handle, 
+            rect.top() - half_handle, 
+            handle_size, 
+            handle_size
+        )
+        self.resize_handles['top_right'] = QRectF(
+            rect.right() - half_handle, 
+            rect.top() - half_handle, 
+            handle_size, 
+            handle_size
+        )
+        self.resize_handles['bottom_left'] = QRectF(
+            rect.left() - half_handle, 
+            rect.bottom() - half_handle, 
+            handle_size, 
+            handle_size
+        )
+        self.resize_handles['bottom_right'] = QRectF(
+            rect.right() - half_handle, 
+            rect.bottom() - half_handle, 
+            handle_size, 
+            handle_size
+        )
     
     def hoverMoveEvent(self, event):
         if not self.isSelected():
@@ -69,11 +89,11 @@ class ResizeRect(QGraphicsRectItem):
         super().paint(painter, option, widget)
 
         if self.isSelected():
-            painter.setPen(QPen(QColor(0, 0, 0), 5))
-            painter.setBrush(QColor(255, 255, 0))  # 黄色调整手柄
-            
+            painter.setPen(QPen(QColor(0, 0, 0), 1))
+            painter.setBrush(QColor(255, 255, 0))
+
             self.update_resize_handles()
-            
+
             for handle in self.resize_handles.values():
                 painter.drawRect(handle)
     
@@ -109,39 +129,39 @@ class ResizeRect(QGraphicsRectItem):
             new_pos = QPointF(self.original_pos)
             
             if self.active_resize_handle == 'top_left':
-                new_rect.setLeft(self.original_rect.left() + delta.x())
-                new_rect.setTop(self.original_rect.top() + delta.y())
-                new_pos = self.original_pos + delta
+                width = self.original_rect.width()-delta.x()
+                height = self.original_rect.height()- delta.y()
+                
+                if width > 0 and height > 0:
+                    new_rect.setWidth(width)
+                    new_rect.setHeight(height)
+                    new_pos = self.original_pos + delta
+                    self.setRect(new_rect)
+                    self.setPos(new_pos)
+            
             elif self.active_resize_handle == 'top_right':
-                new_rect.setRight(self.original_rect.right() + delta.x())
-                new_rect.setTop(self.original_rect.top() + delta.y())
+                new_height = self.original_rect.height() - delta.y()
+                if new_height > 0:
+                    new_rect.setHeight(new_height)
+                    new_rect.setWidth(self.original_rect.width() + delta.x())
+                    self.setRect(new_rect)
+                    self.setPos(self.original_pos.x(), self.original_pos.y() + delta.y())
+            
             elif self.active_resize_handle == 'bottom_left':
-                new_rect.setLeft(self.original_rect.left() + delta.x())
-                new_rect.setBottom(self.original_rect.bottom() + delta.y())
+                new_width = self.original_rect.width() - delta.x()
+                if new_width > 0:
+                    new_rect.setWidth(new_width)
+                    new_rect.setHeight(self.original_rect.height() + delta.y())
+                    self.setRect(new_rect)
+                    self.setPos(self.original_pos.x() + delta.x(), self.original_pos.y())
+            
             elif self.active_resize_handle == 'bottom_right':
-                new_rect.setRight(self.original_rect.right() + delta.x())
-                new_rect.setBottom(self.original_rect.bottom() + delta.y())
-            
-            if new_rect.width() < 10:
-                if self.active_resize_handle in ['top_left', 'bottom_left']:
-                    new_rect.setLeft(new_rect.right() - 10)
-                    new_pos.setX(self.original_pos.x() + self.original_rect.width() - 10)
-                else:
-                    new_rect.setRight(new_rect.left() + 10)
-            
-            if new_rect.height() < 10:
-                if self.active_resize_handle in ['top_left', 'top_right']:
-                    new_rect.setTop(new_rect.bottom() - 10)
-                    new_pos.setY(self.original_pos.y() + self.original_rect.height() - 10)
-                else:
-                    new_rect.setBottom(new_rect.top() + 10)
-            
-            self.setRect(new_rect)
-            
-            if self.active_resize_handle == 'top_left':
-                self.setPos(new_pos)
+                new_rect.setWidth(self.original_rect.width() + delta.x())
+                new_rect.setHeight(self.original_rect.height() + delta.y())
+                self.setRect(new_rect)
             
             event.accept()
+        
         elif self.is_moving:
             current_mouse_pos = self.mapToScene(event.pos())
             delta = current_mouse_pos - self.original_mouse_pos
@@ -164,8 +184,7 @@ class ResizeRect(QGraphicsRectItem):
     
     def focusOutEvent(self, event):
         self.setSelected(False)
-        super().focusOutEvent(event)
-            
+        super().focusOutEvent(event)           
 class TagHandler:
     def __init__(self, main_window):
         self.main_window = main_window
@@ -418,7 +437,7 @@ class TagHandler:
                 self.main_window.scene.removeItem(self.current_rect)
                 self.current_rect = None
             self.start_pos = None
-            
+
     def set_tags_visible(self, visible):
         for tag_id, tag_info in self.tags.items():
             tag_info['rect'].setVisible(visible)
@@ -463,3 +482,5 @@ class TagHandler:
             self.main_window.statusBar.showMessage("Tag layer cleared", 2000)
         else:
             QMessageBox.warning(self.main_window, "Warning", "No tag layer to clear")
+
+    
